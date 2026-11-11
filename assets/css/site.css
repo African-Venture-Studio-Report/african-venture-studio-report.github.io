@@ -378,3 +378,4 @@ figure.exhibit.bare{border:0;padding:0;margin:0}
 .fcol .vbar{width:calc(var(--w) * .8)!important}}
 .scroll-hint{display:none;font-size:12px;color:var(--muted);margin:0 0 6px}
 @media (max-width:700px){.scroll-hint{display:block}}
+.hero-img img{object-position:70% 88%}
