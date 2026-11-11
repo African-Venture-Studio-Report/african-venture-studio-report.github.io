@@ -383,3 +383,15 @@ figure.exhibit.bare{border:0;padding:0;margin:0}
 .hero .byline a{color:#C9B6E4;text-decoration:underline;text-decoration-color:rgba(201,182,228,.5)}.hero .byline a:hover{color:#fff}
 .person .li{display:block;font-weight:700;font-size:13px;color:var(--p);text-decoration:underline;margin-top:-4px}
 .authors .quote p.eyebrow{font-size:13px;color:var(--muted)}
+/* Author cards: spread across the section, aligned */
+.people{justify-content:space-between;align-items:flex-start;gap:24px}
+.people.sig{max-width:none;width:100%}
+.person{width:150px;gap:8px}
+.person img{width:120px;height:120px}
+.person .pname{min-height:2.6em;display:flex;align-items:flex-start;justify-content:center}
+.person .li{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:700;color:var(--p);padding:6px 10px;border:1px solid var(--lav2);border-radius:999px;background:#fff}
+.person:hover .li{background:var(--p);color:#fff;border-color:var(--p)}
+.person:hover{text-decoration:none}
+@media (max-width:520px){.people{justify-content:space-around}.person{width:30%;min-width:96px}.person img{width:88px;height:88px}}
+.person,.person:hover,.person *{text-decoration:none!important}
+@media (max-width:520px){.people{flex-wrap:nowrap;gap:8px;justify-content:space-between}.person{flex:1 1 0;width:auto;min-width:0;font-size:13px}.person img{width:84px;height:84px}.person .li{font-size:12px;padding:5px 8px}}
