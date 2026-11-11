@@ -380,3 +380,5 @@ figure.exhibit.bare{border:0;padding:0;margin:0}
 @media (max-width:700px){.scroll-hint{display:block}}
 .hero-img img{object-position:70% 88%}
 .person{text-decoration:none}.person:hover{color:var(--p);text-decoration:underline}
+.hero .byline a{color:#C9B6E4;text-decoration:underline;text-decoration-color:rgba(201,182,228,.5)}.hero .byline a:hover{color:#fff}
+.person .li{display:block;font-weight:700;font-size:13px;color:var(--p);text-decoration:underline;margin-top:-4px}
