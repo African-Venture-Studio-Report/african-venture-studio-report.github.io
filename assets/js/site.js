@@ -36,3 +36,14 @@
     });
   });
 })();
+(function () {
+  var btn = document.querySelector('.menu-btn'), menu = document.getElementById('site-menu');
+  if (!btn || !menu) return;
+  var here = location.pathname.split('/').pop() || 'index.html';
+  menu.querySelectorAll('a').forEach(function (a) { if (a.getAttribute('href') === here) a.setAttribute('aria-current', 'page'); });
+  function set(open) { btn.setAttribute('aria-expanded', open ? 'true' : 'false'); menu.hidden = !open; }
+  btn.addEventListener('click', function (e) { e.stopPropagation(); set(menu.hidden); });
+  document.addEventListener('click', function (e) { if (!menu.hidden && !menu.contains(e.target)) set(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menu.hidden) { set(false); btn.focus(); } });
+  menu.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { set(false); }); });
+})();

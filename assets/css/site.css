@@ -395,3 +395,27 @@ figure.exhibit.bare{border:0;padding:0;margin:0}
 @media (max-width:520px){.people{justify-content:space-around}.person{width:30%;min-width:96px}.person img{width:88px;height:88px}}
 .person,.person:hover,.person *{text-decoration:none!important}
 @media (max-width:520px){.people{flex-wrap:nowrap;gap:8px;justify-content:space-between}.person{flex:1 1 0;width:auto;min-width:0;font-size:13px}.person img{width:84px;height:84px}.person .li{font-size:12px;padding:5px 8px}}
+/* Phone menu */
+.menu-btn{display:none;align-items:center;gap:6px;font-family:Lato,sans-serif;font-weight:700;font-size:14px;color:var(--p);background:#fff;border:1px solid var(--lav2);border-radius:4px;padding:10px 12px;min-height:44px;cursor:pointer}
+.menu-btn[aria-expanded=true]{background:var(--p);color:#fff;border-color:var(--p)}
+.site-menu{position:absolute;left:0;right:0;top:100%;background:#fff;border-bottom:3px solid var(--p);box-shadow:0 12px 24px rgba(27,13,43,.12);padding:8px 20px 20px;max-height:calc(100vh - 70px);overflow-y:auto;display:flex;flex-direction:column}
+.site-menu .eyebrow{margin:16px 0 4px;font-size:11px}
+.site-menu a{display:flex;gap:12px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--line);text-decoration:none;font-family:Lato,sans-serif;font-weight:700;font-size:15px;color:var(--ink)}
+.site-menu a b{flex:0 0 18px;color:var(--gold-text)}
+.site-menu a:hover{color:var(--p)}
+.site-head nav{position:relative}
+@media (max-width:720px){
+  .site-head{position:sticky;top:0}
+  .site-head nav{flex-wrap:nowrap;padding:8px 16px;gap:10px}
+  .brand{font-size:13px;gap:8px;min-width:0}
+  .brand img{width:28px;height:28px}
+  .nav-links{flex-wrap:nowrap;gap:8px}
+  .nav-links > a:not(.btn-p){display:none}
+  .nav-links a.btn-p{padding:10px 12px;font-size:13px;white-space:nowrap}
+  .menu-btn{display:inline-flex}
+  .toc{display:none}
+  .layout{padding-top:28px}
+}
+@media (min-width:721px){.site-menu{display:none!important}}
+.site-menu a[aria-current=page]{color:var(--p)}.site-menu a[aria-current=page]::after{content:"You are here";margin-left:auto;font-size:11px;color:var(--muted);font-weight:400}
+@media (max-width:720px){.hide-xs{display:none}.brand{font-size:14px;line-height:1.2}}
