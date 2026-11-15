@@ -481,4 +481,9 @@ figure.exhibit.bare{border:0;padding:0;margin:0}
   .ask-panel:not(.is-min) .ask-head{padding-top:10px}
   body{padding-bottom:0}
 }
-@media (max-width:600px){html.ask-min body{padding-bottom:64px}}
+@media (max-width:600px){html.chat-minimised body{padding-bottom:64px}}
+/* Keep long labels and web addresses inside the screen */
+.hval{white-space:normal;min-width:0;overflow-wrap:anywhere}
+.htrack{min-width:0}
+article.report a,.notes a,.ex-notes a{overflow-wrap:anywhere;word-break:break-word}
+article.report,.notes{overflow-wrap:break-word}

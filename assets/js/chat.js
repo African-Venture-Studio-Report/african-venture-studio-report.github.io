@@ -60,7 +60,7 @@
     btn.hidden = v !== 'closed';
     btn.setAttribute('aria-expanded', v === 'closed' ? 'false' : 'true');
     document.documentElement.classList.toggle('ask-open', v === 'open' && narrow.matches);
-    document.documentElement.classList.toggle('ask-min', v === 'min');
+    document.documentElement.classList.toggle('chat-minimised', v === 'min');
     minBtn.innerHTML = v === 'min' ? ICON_MAX : ICON_MIN;
     minBtn.setAttribute('aria-label', v === 'min' ? 'Expand chat' : 'Minimise chat');
     titleWrap.setAttribute('aria-label', v === 'min' ? 'Expand chat' : 'Ask the report');
