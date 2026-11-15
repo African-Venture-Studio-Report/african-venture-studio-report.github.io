@@ -138,8 +138,31 @@ const INTENTS = [
     labels: ['B.2 Studios and funding rates by region', 'Exhibit 21 (', 'Funding rates are highest at West African', 'In North Africa, the constraint'],
     hint: '' },
 ];
+// "Summarise chapter 6", "what does chapter 2 cover", "chapter 5", including common typos
+const NUMWORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
+const CHAP_RE = /\b(?:ch\.?|c[a-z]*h[a-z]*p[a-z]*)\s*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i;
+const SUMMARY_RE = /summ?[ae]?r|overview|recap|key (finding|point|takeaway|message)|main (finding|point|message|argument)|about|say|cover|explain|tell me|gist|brief|conclu/i;
+const CHAPTER_COUNT = 9;
+function chapterOf(q) {
+  if (/exhibit/i.test(q)) return null;
+  const m = q.match(CHAP_RE); if (!m) return null;
+  const n = /\d/.test(m[1]) ? +m[1] : NUMWORDS[m[1].toLowerCase()];
+  const rest = q.replace(m[0], '').trim();
+  if (!SUMMARY_RE.test(q) && tokens(rest).length > 2) return null;
+  return n;
+}
+function chapterHits(n) {
+  const ids = [];
+  CHUNKS.forEach((c, i) => { if (c.url.startsWith(`chapter-${n}.html`) && !c.label.startsWith('Exhibit')) ids.push(i); });
+  return ids.slice(0, 8);
+}
 function intentOf(q) { return INTENTS.find(x => x.re.test(q)) || null; }
 function search(q) {
+  const chap = chapterOf(q);
+  if (chap && chap >= 1 && chap <= CHAPTER_COUNT) {
+    const ids = chapterHits(chap);
+    if (ids.length) return { hits: ids.map(i => ({ i, s: 60 })), top: 60, qt: [] };
+  }
   const intent = intentOf(q);
   for (const [re, extra] of EXPAND) if (re.test(q)) q += extra;
   if (!INDEX) buildIndex();
@@ -148,7 +171,7 @@ function search(q) {
     for (const l of intent.labels) { const i = CHUNKS.findIndex((c, k) => (c.label.includes(l) || c.text.startsWith('Table rows: Term: ' + l) || c.text.includes('Term: ' + l + ';')) && !ids.includes(k)); if (i >= 0) ids.push(i); }
     if (ids.length) return { hits: ids.slice(0, TOP_K).map(i => ({ i, s: 50 })), top: 50, qt: [] };
   }
-  if (OVERVIEW.test(q)) {
+  if (OVERVIEW.test(q) && !chapterOf(q)) {
     const ids = CHUNKS.map((c, i) => [c, i]).filter(([c]) => c.url.startsWith('executive-summary') || c.label.includes('Foreword from the authors')).slice(0, TOP_K).map(([, i]) => i);
     return { hits: ids.map(i => ({ i, s: 99 })), top: 99, qt: [] };
   }
@@ -320,14 +343,18 @@ export default {
         answer: `In this report, \u201c${g.term}\u201d means: ${g.meaning} [1]`,
         sources: [{ label: CHUNKS[g.i].label, url: SITE + CHUNKS[g.i].url, quote: g.row }] }, 200, okOrigin);
     }
-    const isOverview = OVERVIEW.test(query) || OVERVIEW.test(q);
+    const chapN = chapterOf(q);
+    if (chapN && (chapN < 1 || chapN > CHAPTER_COUNT)) {
+      return json({ covered: false, answer: `The report has ${CHAPTER_COUNT} chapters, followed by a technical annex. Ask about any chapter from 1 to ${CHAPTER_COUNT}.`, sources: [] }, 200, okOrigin);
+    }
+    const isOverview = !chapN && (OVERVIEW.test(query) || OVERVIEW.test(q));
     const passages = hits.map((h, k) => `[S${k + 1}] (${CHUNKS[h.i].label})\n${CHUNKS[h.i].text}`).join('\n\n');
     let raw = '';
     try {
       const out = await env.REPORT_AI.run(MODEL, {
         messages: [ { role: 'system', content: SYSTEM },
           ...history.flatMap(h => [ { role: 'user', content: h.q }, { role: 'assistant', content: h.a } ]),
-          { role: 'user', content: `Source passages:\n\n${passages}\n\n` + (intentOf(query) && intentOf(query).hint ? intentOf(query).hint + '\n\n' : '') + (isOverview ? 'These passages are the report\'s executive summary. The question asks for an overview: summarise the main findings they state, in at most 4 sentences, with citations.\n\n' : '') + `Question: ${q}` } ],
+          { role: 'user', content: `Source passages:\n\n${passages}\n\n` + (chapN ? `These passages are Chapter ${chapN} of the report. The question asks for a summary of that chapter: state its main findings and caveats, in at most 4 sentences, with citations.\n\n` : '') + (intentOf(query) && intentOf(query).hint ? intentOf(query).hint + '\n\n' : '') + (isOverview ? 'These passages are the report\'s executive summary. The question asks for an overview: summarise the main findings they state, in at most 4 sentences, with citations.\n\n' : '') + `Question: ${q}` } ],
         max_tokens: 400, temperature: 0.1
       });
       raw = String(out && (out.response ?? (out.result && out.result.response) ?? (out.choices && out.choices[0] && out.choices[0].message && out.choices[0].message.content)) || '').trim();
@@ -336,7 +363,7 @@ export default {
     }
 
     if (!raw || /NOT_COVERED/.test(raw)) {
-      if (isOverview || intentOf(query) || intentOf(q)) {
+      if (isOverview || chapN || intentOf(query) || intentOf(q)) {
         return json({ covered: true, verified: false,
           answer: 'The report does not answer that in a single passage. These sections are the closest match:',
           sources: sourcesFor(hits.slice(0, 3).map(h => h.i)) }, 200, okOrigin);
