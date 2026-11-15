@@ -1,6 +1,6 @@
 /**
  * "Ask the report" service for the African Venture Studio Report 2026.
- * Runs on Cloudflare Workers (free plan) with a Workers AI binding named AI.
+ * Runs on Cloudflare Workers (free plan) with a Workers AI binding named REPORT_AI.
  *
  * Safeguards against made-up answers:
  *  1. Every answer starts from a search of the report text held in this file. If nothing
@@ -129,7 +129,7 @@ export default {
     const passages = hits.map((h, k) => `[S${k + 1}] (${CHUNKS[h.i].label})\n${CHUNKS[h.i].text}`).join('\n\n');
     let raw = '';
     try {
-      const out = await env.AI.run(MODEL, {
+      const out = await env.REPORT_AI.run(MODEL, {
         messages: [ { role: 'system', content: SYSTEM }, { role: 'user', content: `Source passages:\n\n${passages}\n\nQuestion: ${q}` } ],
         max_tokens: 400, temperature: 0.1
       });
