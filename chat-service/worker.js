@@ -142,27 +142,31 @@ const INTENTS = [
 const NUMWORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
 const CHAP_RE = /\b(?:ch\.?|c[a-z]*h[a-z]*p[a-z]*)\s*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i;
 const SUMMARY_RE = /summ?[ae]?r|overview|recap|key (finding|point|takeaway|message)|main (finding|point|message|argument)|about|say|cover|explain|tell me|gist|brief|conclu/i;
-const CHAPTER_COUNT = 9;
+function intentOf(q) { return INTENTS.find(x => x.re.test(q)) || null; }
+
+// Chapter questions: summaries use that chapter's own text; exhibit lists are built directly from the report
+const WORDNUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, last: 9 };
 function chapterOf(q) {
-  if (/exhibit/i.test(q)) return null;
-  const m = q.match(CHAP_RE); if (!m) return null;
-  const n = /\d/.test(m[1]) ? +m[1] : NUMWORDS[m[1].toLowerCase()];
-  const rest = q.replace(m[0], '').trim();
-  if (!SUMMARY_RE.test(q) && tokens(rest).length > 2) return null;
-  return n;
+  const m = q.match(CHAP_RE) || q.match(/\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|last)\s+chapter\b/i);
+  if (m) return +m[1] || WORDNUM[m[1].toLowerCase()] || NUMWORDS[m[1].toLowerCase()];
+  if (/\b(technical )?annex\b/i.test(q)) return 'annex';
+  return 0;
+}const ASKS_EXHIBITS = /\bexhibits?\b|\bcharts?\b|\bfigures\b|\btables\b|\bgraphs?\b/i;
+function chapterIntro(n) { return CHUNKS.findIndex(c => c.label.startsWith(`Chapter ${n}: `) && !c.label.includes(' \u203a ')); }
+function exhibitsOf(n) {
+  const tag = n === 'annex' ? '(Technical annex)' : `(Chapter ${n})`;
+  const seen = new Set(), out = [];
+  CHUNKS.forEach((c, i) => { const m = c.label.match(/^Exhibit (\d+) (\([^)]*\))/); if (m && m[2] === tag && !seen.has(m[1])) { seen.add(m[1]); out.push(i); } });
+  return out;
 }
 function chapterHits(n) {
-  const ids = [];
-  CHUNKS.forEach((c, i) => { if (c.url.startsWith(`chapter-${n}.html`) && !c.label.startsWith('Exhibit')) ids.push(i); });
-  return ids.slice(0, 8);
+  const ids = [], seen = new Set();
+  const intro = chapterIntro(n); if (intro >= 0) { ids.push(intro); seen.add(CHUNKS[intro].label); }
+  CHUNKS.forEach((c, i) => { if (c.label.startsWith(`Chapter ${n}: `) && !seen.has(c.label)) { seen.add(c.label); ids.push(i); } });
+  return ids.slice(0, TOP_K);
 }
-function intentOf(q) { return INTENTS.find(x => x.re.test(q)) || null; }
+function chapterTitle(n) { const i = chapterIntro(n); return i >= 0 ? CHUNKS[i].label : ''; }
 function search(q) {
-  const chap = chapterOf(q);
-  if (chap && chap >= 1 && chap <= CHAPTER_COUNT) {
-    const ids = chapterHits(chap);
-    if (ids.length) return { hits: ids.map(i => ({ i, s: 60 })), top: 60, qt: [] };
-  }
   const intent = intentOf(q);
   for (const [re, extra] of EXPAND) if (re.test(q)) q += extra;
   if (!INDEX) buildIndex();
@@ -327,10 +331,45 @@ export default {
     if (!q) return json({ error: 'Please type a question.' }, 400, okOrigin);
     if (q.length > MAX_QUESTION) return json({ error: 'Please keep questions under 400 characters.' }, 400, okOrigin);
 
-    let query = q;
+    let query = q, chapterHint = '';
     if (history.length && (tokens(q).length < 5 || FOLLOW.test(q))) query = history[history.length - 1].q + ' ' + q;
-    let { hits, top } = search(query);
-    if ((!hits.length || top < MIN_SCORE) && query !== q) ({ hits, top } = search(q));
+    const ch = chapterOf(q);
+    const chapterLinks = () => Array.from({ length: 9 }, (_, k) => chapterIntro(k + 1)).filter(i => i >= 0).map(i => ({ label: CHUNKS[i].label, url: SITE + '/' + CHUNKS[i].url }));
+    // How many exhibits, in total or by chapter
+    if (!ch && ASKS_EXHIBITS.test(q) && /\bhow many\b|\blist\b|\bwhich\b|\ball\b|\bper chapter\b|\beach chapter\b/i.test(q)) {
+      const parts = [];
+      for (let n = 1; n <= 9; n++) { const k = exhibitsOf(n).length; if (k) parts.push(`Chapter ${n}: ${k}`); }
+      const a = exhibitsOf('annex').length; if (a) parts.push(`Technical annex: ${a}`);
+      const total = new Set(CHUNKS.map(c => (c.label.match(/^Exhibit (\d+) \(/) || [])[1]).filter(Boolean)).size;
+      return json({ covered: true, verified: true,
+        answer: `The report has ${total} exhibits. By chapter: ${parts.join('; ')}. Ask about a chapter, for example \u201cWhat exhibits are in Chapter 3?\u201d, to see each one with a link.`,
+        sources: chapterLinks() }, 200, okOrigin);
+    }
+    if (ch) {
+      const valid = ch === 'annex' || (ch >= 1 && ch <= 9);
+      if (!valid) return json({ covered: true, verified: true,
+        answer: `The report has nine chapters, followed by a technical annex and references. These are the chapters:`, sources: chapterLinks() }, 200, okOrigin);
+      const name = ch === 'annex' ? 'The technical annex' : `Chapter ${ch}`;
+      if (ASKS_EXHIBITS.test(q)) {
+        const ex = exhibitsOf(ch);
+        return json({ covered: true, verified: true,
+          answer: ex.length ? `${name} has ${ex.length} exhibit${ex.length === 1 ? '' : 's'}. Each link below opens the exhibit, and its title states what it shows:` : `${name} has no exhibits.`,
+          sources: ex.map(i => ({ label: CHUNKS[i].label.replace(/ \((Chapter \d+|Technical annex)\)/, ''), url: SITE + '/' + CHUNKS[i].url })) }, 200, okOrigin);
+      }
+    }
+    let hits, top;
+    if (ch && ch !== 'annex') {
+      const rest = q.replace(CHAP_RE, ' ');
+      const specific = !SUMMARY_RE.test(q) && tokens(rest).length > 1;
+      let ids = [];
+      if (specific) ids = search(rest).hits.filter(h => CHUNKS[h.i].url.startsWith(`chapter-${ch}.html`)).map(h => h.i);
+      if (!ids.length) ids = chapterHits(ch);
+      hits = ids.slice(0, TOP_K).map(i => ({ i, s: 50 })); top = 50;
+      chapterHint = `These passages are ${chapterTitle(ch)}. Answer the question about this chapter only. If it asks for a summary, summarise the chapter's main findings in at most 4 sentences.`;
+    } else {
+      ({ hits, top } = search(query));
+      if ((!hits.length || top < MIN_SCORE) && query !== q) ({ hits, top } = search(q));
+    }
     if (!hits.length || top < MIN_SCORE) {
       return json({ covered: false, answer: NOT_COVERED + ' ' + NOT_COVERED_HINT, sources: [] }, 200, okOrigin);
     }
@@ -341,20 +380,16 @@ export default {
       const g = glossary(dterm);
       if (g) return json({ covered: true, verified: true,
         answer: `In this report, \u201c${g.term}\u201d means: ${g.meaning} [1]`,
-        sources: [{ label: CHUNKS[g.i].label, url: SITE + CHUNKS[g.i].url, quote: g.row }] }, 200, okOrigin);
+        sources: [{ label: CHUNKS[g.i].label, url: SITE + '/' + CHUNKS[g.i].url, quote: g.row }] }, 200, okOrigin);
     }
-    const chapN = chapterOf(q);
-    if (chapN && (chapN < 1 || chapN > CHAPTER_COUNT)) {
-      return json({ covered: false, answer: `The report has ${CHAPTER_COUNT} chapters, followed by a technical annex. Ask about any chapter from 1 to ${CHAPTER_COUNT}.`, sources: [] }, 200, okOrigin);
-    }
-    const isOverview = !chapN && (OVERVIEW.test(query) || OVERVIEW.test(q));
+    const isOverview = !ch && (OVERVIEW.test(query) || OVERVIEW.test(q));
     const passages = hits.map((h, k) => `[S${k + 1}] (${CHUNKS[h.i].label})\n${CHUNKS[h.i].text}`).join('\n\n');
     let raw = '';
     try {
       const out = await env.REPORT_AI.run(MODEL, {
         messages: [ { role: 'system', content: SYSTEM },
           ...history.flatMap(h => [ { role: 'user', content: h.q }, { role: 'assistant', content: h.a } ]),
-          { role: 'user', content: `Source passages:\n\n${passages}\n\n` + (chapN ? `These passages are Chapter ${chapN} of the report. The question asks for a summary of that chapter: state its main findings and caveats, in at most 4 sentences, with citations.\n\n` : '') + (intentOf(query) && intentOf(query).hint ? intentOf(query).hint + '\n\n' : '') + (isOverview ? 'These passages are the report\'s executive summary. The question asks for an overview: summarise the main findings they state, in at most 4 sentences, with citations.\n\n' : '') + `Question: ${q}` } ],
+          { role: 'user', content: `Source passages:\n\n${passages}\n\n` + (chapterHint ? chapterHint + '\n\n' : '') + (!ch && intentOf(query) && intentOf(query).hint ? intentOf(query).hint + '\n\n' : '') + (isOverview ? 'These passages are the report\'s executive summary. The question asks for an overview: summarise the main findings they state, in at most 4 sentences, with citations.\n\n' : '') + `Question: ${q}` } ],
         max_tokens: 400, temperature: 0.1
       });
       raw = String(out && (out.response ?? (out.result && out.result.response) ?? (out.choices && out.choices[0] && out.choices[0].message && out.choices[0].message.content)) || '').trim();
@@ -363,7 +398,7 @@ export default {
     }
 
     if (!raw || /NOT_COVERED/.test(raw)) {
-      if (isOverview || chapN || intentOf(query) || intentOf(q)) {
+      if (isOverview || ch || intentOf(query) || intentOf(q)) {
         return json({ covered: true, verified: false,
           answer: 'The report does not answer that in a single passage. These sections are the closest match:',
           sources: sourcesFor(hits.slice(0, 3).map(h => h.i)) }, 200, okOrigin);
@@ -375,7 +410,7 @@ export default {
           const shown = term.charAt(0).toUpperCase() === term.charAt(0) ? term : term.toLowerCase();
           return json({ covered: true, verified: false,
             answer: `The report uses \u201c${shown}\u201d but does not define it. It appears in ${found.total} section${found.total === 1 ? '' : 's'} of the report` + (found.total > found.ids.length ? ', including:' : ':'),
-            sources: found.ids.map(i => ({ label: CHUNKS[i].label, url: SITE + CHUNKS[i].url, quote: termQuote(CHUNKS[i].text, term) })) }, 200, okOrigin);
+            sources: found.ids.map(i => ({ label: CHUNKS[i].label, url: SITE + '/' + CHUNKS[i].url, quote: termQuote(CHUNKS[i].text, term) })) }, 200, okOrigin);
         }
       }
       return json({ covered: false, answer: NOT_COVERED + ' ' + NOT_COVERED_HINT, sources: [] }, 200, okOrigin);
@@ -389,7 +424,7 @@ export default {
           const shown = term.charAt(0).toUpperCase() === term.charAt(0) ? term : term.toLowerCase();
           return json({ covered: true, verified: false,
             answer: `The report uses \u201c${shown}\u201d but does not define it. It appears in ${found.total} section${found.total === 1 ? '' : 's'} of the report` + (found.total > found.ids.length ? ', including:' : ':'),
-            sources: found.ids.map(i => ({ label: CHUNKS[i].label, url: SITE + CHUNKS[i].url, quote: termQuote(CHUNKS[i].text, term) })) }, 200, okOrigin);
+            sources: found.ids.map(i => ({ label: CHUNKS[i].label, url: SITE + '/' + CHUNKS[i].url, quote: termQuote(CHUNKS[i].text, term) })) }, 200, okOrigin);
         }
       }
       return json({ covered: false, answer: NOT_COVERED + ' ' + NOT_COVERED_HINT, sources: [] }, 200, okOrigin);
