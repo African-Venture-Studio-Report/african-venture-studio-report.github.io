@@ -80,6 +80,32 @@ const OVERVIEW = /\b(what('?s| is) (this|the) (report|study|research)( all)? abo
 const EXPAND = [
   [/cut[\s-]?off|how (recent|current|up to date)|date range|time ?frame|period covered|latest data|data (end|run)/i, ' Round and investor data come from Africa: The Big Deal covering 1 January 2019 to 30 September 2026'],
 ];
+// Definition questions: "what is a Series A", "what does dormancy mean", "define pre-seed"
+const DEFINE = /^\s*(?:what\s+(?:is|are)\s+(?:an?\s+|the\s+)?(.+?)|what\s+does\s+(?:an?\s+|the\s+)?(.+?)\s+mean|define\s+(?:an?\s+|the\s+)?(.+?)|(?:the\s+)?meaning\s+of\s+(?:an?\s+|the\s+)?(.+?))\s*[?.!]*\s*$/i;
+function definitionTerm(q) {
+  const m = q.match(DEFINE); if (!m) return '';
+  const t = (m[1] || m[2] || m[3] || m[4] || '').replace(/["\u201c\u201d\u2018\u2019']/g, '').trim();
+  return t.split(/\s+/).length <= 4 ? t : '';
+}
+function mentions(term) {
+  const re = new RegExp('\\b' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '[\\s-]+') + '(s|es)?\\b', 'gi');
+  const byLabel = new Map();
+  CHUNKS.forEach((c, i) => {
+    const n = (c.text.match(re) || []).length; if (!n) return;
+    const cur = byLabel.get(c.label);
+    if (!cur || n > cur.n) byLabel.set(c.label, { i, n });
+  });
+  const all = [...byLabel.values()];
+  const top = all.slice().sort((a, b) => b.n - a.n || a.i - b.i).slice(0, 6).sort((a, b) => a.i - b.i);
+  return { total: all.length, ids: top.map(x => x.i) };
+}
+function termQuote(text, term) {
+  const re = new RegExp('\\b' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '[\\s-]+'), 'i');
+  const units = splitUnits(text).map(u => u.replace(/^.*?(Data|Table) rows: /, '')).filter(u => re.test(u) && u.length >= 20);
+  if (!units.length) return bestQuote(text, term);
+  const u = units.sort((a, b) => a.length - b.length).find(x => x.length >= 40) || units[0];
+  return u.length > 340 ? u.slice(0, 337).replace(/\s+\S*$/, '') + '\u2026' : u;
+}
 function search(q) {
   for (const [re, extra] of EXPAND) if (re.test(q)) q += extra;
   if (!INDEX) buildIndex();
@@ -268,10 +294,30 @@ export default {
           answer: 'The report does not answer that in a single passage. These sections are the closest match:',
           sources: sourcesFor(hits.slice(0, 3).map(h => h.i)) }, 200, okOrigin);
       }
+      const term = definitionTerm(q);
+      if (term) {
+        const found = mentions(term);
+        if (found.total) {
+          const shown = term.charAt(0).toUpperCase() === term.charAt(0) ? term : term.toLowerCase();
+          return json({ covered: true, verified: false,
+            answer: `The report uses \u201c${shown}\u201d but does not define it. It appears in ${found.total} section${found.total === 1 ? '' : 's'} of the report` + (found.total > found.ids.length ? ', including:' : ':'),
+            sources: found.ids.map(i => ({ label: CHUNKS[i].label, url: SITE + CHUNKS[i].url, quote: termQuote(CHUNKS[i].text, term) })) }, 200, okOrigin);
+        }
+      }
       return json({ covered: false, answer: NOT_COVERED + ' ' + NOT_COVERED_HINT, sources: [] }, 200, okOrigin);
     }
     const cited = [...new Set([...raw.matchAll(/\[S(\d+)\]/g)].map(m => +m[1] - 1).filter(k => k >= 0 && k < hits.length))];
     if (!cited.length) {
+      const term = definitionTerm(q);
+      if (term) {
+        const found = mentions(term);
+        if (found.total) {
+          const shown = term.charAt(0).toUpperCase() === term.charAt(0) ? term : term.toLowerCase();
+          return json({ covered: true, verified: false,
+            answer: `The report uses \u201c${shown}\u201d but does not define it. It appears in ${found.total} section${found.total === 1 ? '' : 's'} of the report` + (found.total > found.ids.length ? ', including:' : ':'),
+            sources: found.ids.map(i => ({ label: CHUNKS[i].label, url: SITE + CHUNKS[i].url, quote: termQuote(CHUNKS[i].text, term) })) }, 200, okOrigin);
+        }
+      }
       return json({ covered: false, answer: NOT_COVERED + ' ' + NOT_COVERED_HINT, sources: [] }, 200, okOrigin);
     }
     const citedText = cited.map(k => CHUNKS[hits[k].i].text).join(' ').replace(/(\d),(\d)/g, '$1$2');
