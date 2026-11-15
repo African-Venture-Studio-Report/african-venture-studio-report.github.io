@@ -26,7 +26,7 @@
   head.appendChild(title); head.appendChild(close);
   var log = el('div', 'ask-log'); log.setAttribute('aria-live', 'polite');
   var intro = el('div', 'ask-intro');
-  intro.appendChild(el('p', null, 'Ask a question about the findings. Answers come only from the report text, with a link to the chapter or exhibit they draw on.'));
+  intro.appendChild(el('p', null, 'Ask about the findings. Every answer is drawn from the report and linked to its source chapter or exhibit.'));
   var chips = el('div', 'ask-chips');
   SUGGEST.forEach(function (s) { var c = el('button', 'ask-chip', s); c.type = 'button'; c.addEventListener('click', function () { send(s); }); chips.appendChild(c); });
   intro.appendChild(chips);
@@ -36,7 +36,7 @@
   var input = el('textarea'); input.id = 'ask-input'; input.rows = 1; input.maxLength = 400; input.placeholder = 'Ask about the findings…';
   var go = el('button', 'ask-send', 'Ask'); go.type = 'submit';
   form.appendChild(label); form.appendChild(input); form.appendChild(go);
-  var note = el('p', 'ask-note', 'Answers are AI-generated from the report text. The report is the authority.');
+  var note = el('p', 'ask-note', 'AI-generated from the report. The full report is the authoritative source.');
   panel.appendChild(head); panel.appendChild(log); panel.appendChild(form); panel.appendChild(note);
   document.body.appendChild(btn); document.body.appendChild(panel);
 
