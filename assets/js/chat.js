@@ -14,7 +14,7 @@
   var narrow = window.matchMedia ? window.matchMedia('(max-width: 600px)') : { matches: false };
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-  function localUrl(u) { return u.indexOf(SITE) === 0 ? u.slice(SITE.length) : null; }
+  function localUrl(u) { u = String(u || ''); if (u.indexOf(SITE) === 0) return u.slice(SITE.length) || '/'; return /^[a-z0-9-]+\.html(#[^ ]*)?$/i.test(u) ? u : null; }
 
   var btn = el('button', 'ask-btn');
   btn.type = 'button';
