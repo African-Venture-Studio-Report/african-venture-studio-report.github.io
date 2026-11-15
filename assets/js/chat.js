@@ -7,6 +7,12 @@
   var SITE = 'https://african-venture-studio-report.github.io/';
   var SUGGEST = ['What is this report about?', 'Who writes the first cheque for studio companies?', 'Do studio companies raise second rounds more often than other startups?'];
 
+  var KEY = 'avsr-ask-v1';
+  function load() { try { return JSON.parse(sessionStorage.getItem(KEY)) || null; } catch (e) { return null; } }
+  function save() { try { sessionStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable: chat still works on this page */ } }
+  var state = load() || { open: false, msgs: [] };
+  var narrow = window.matchMedia ? window.matchMedia('(max-width: 600px)') : { matches: false };
+
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function localUrl(u) { return u.indexOf(SITE) === 0 ? u.slice(SITE.length) : null; }
 
@@ -23,7 +29,9 @@
   var head = el('div', 'ask-head');
   var title = el('h2', null, 'Ask the report'); title.id = 'ask-title';
   var close = el('button', 'ask-close'); close.type = 'button'; close.setAttribute('aria-label', 'Close'); close.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
-  head.appendChild(title); head.appendChild(close);
+  var reset = el('button', 'ask-reset', 'New chat'); reset.type = 'button';
+  var tools = el('div', 'ask-tools'); tools.appendChild(reset); tools.appendChild(close);
+  head.appendChild(title); head.appendChild(tools);
   var log = el('div', 'ask-log'); log.setAttribute('aria-live', 'polite');
   var intro = el('div', 'ask-intro');
   intro.appendChild(el('p', null, 'Ask about the findings. Every answer is drawn from the report and linked to its source chapter or exhibit.'));
@@ -40,14 +48,25 @@
   panel.appendChild(head); panel.appendChild(log); panel.appendChild(form); panel.appendChild(note);
   document.body.appendChild(btn); document.body.appendChild(panel);
 
-  function open() { panel.hidden = false; btn.setAttribute('aria-expanded', 'true'); document.documentElement.classList.add('ask-open'); setTimeout(function () { input.focus(); }, 30); }
-  function shut() { panel.hidden = true; btn.setAttribute('aria-expanded', 'false'); document.documentElement.classList.remove('ask-open'); btn.focus(); }
+  function open() { state.open = true; save(); panel.hidden = false; btn.setAttribute('aria-expanded', 'true'); document.documentElement.classList.add('ask-open'); setTimeout(function () { input.focus(); }, 30); }
+  function shut() { state.open = false; save(); panel.hidden = true; btn.setAttribute('aria-expanded', 'false'); document.documentElement.classList.remove('ask-open'); btn.focus(); }
   btn.addEventListener('click', function () { panel.hidden ? open() : shut(); });
   close.addEventListener('click', shut);
+  reset.addEventListener('click', function () {
+    state.msgs = []; save();
+    while (log.firstChild) log.removeChild(log.firstChild);
+    log.appendChild(intro); reset.hidden = true; input.focus();
+  });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden) shut(); });
   input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit ? form.requestSubmit() : send(input.value); } });
   form.addEventListener('submit', function (e) { e.preventDefault(); send(input.value); });
 
+  log.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (!a) return;
+    try { sessionStorage.setItem(KEY + '-jump', '1'); } catch (x) { /* ignore */ }
+    if (narrow.matches) { state.open = false; save(); panel.hidden = true; btn.setAttribute('aria-expanded', 'false'); document.documentElement.classList.remove('ask-open'); }
+  });
   function bubble(cls) { var b = el('div', 'ask-msg ' + cls); log.appendChild(b); log.scrollTop = log.scrollHeight; return b; }
   function renderAnswer(box, data) {
     var p = el('p');
@@ -73,15 +92,39 @@
     if (intro.parentNode) intro.parentNode.removeChild(intro);
     busy = true; go.disabled = true; input.value = '';
     bubble('q').textContent = q;
+    state.msgs.push({ t: 'q', text: q }); reset.hidden = false; save();
     var wait = bubble('a pending'); wait.textContent = 'Searching the report…';
     fetch(ENDPOINT, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: q }) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
         wait.className = 'ask-msg a'; wait.textContent = '';
-        if (!res.ok || res.j.error) { wait.textContent = res.j.error || 'Something went wrong. Please try again.'; return; }
+        if (!res.ok || res.j.error) { wait.textContent = res.j.error || 'Something went wrong. Please try again.'; state.msgs.push({ t: 'e', text: wait.textContent }); save(); return; }
         renderAnswer(wait, res.j);
+        state.msgs.push({ t: 'a', data: { answer: res.j.answer, sources: res.j.sources || [] } });
+        if (state.msgs.length > 40) state.msgs = state.msgs.slice(-40);
+        save();
       })
-      .catch(function () { wait.className = 'ask-msg a'; wait.textContent = 'The assistant is unavailable right now. Please try again later.'; })
+      .catch(function () { wait.className = 'ask-msg a'; wait.textContent = 'The assistant is unavailable right now. Please try again later.'; state.msgs.push({ t: 'e', text: wait.textContent }); save(); })
       .then(function () { busy = false; go.disabled = false; log.scrollTop = log.scrollHeight; input.focus(); });
   }
+  // Restore this session's conversation after a page change or reload
+  reset.hidden = !state.msgs.length;
+  if (state.msgs.length) {
+    if (intro.parentNode) intro.parentNode.removeChild(intro);
+    state.msgs.forEach(function (m) {
+      if (m.t === 'q') bubble('q').textContent = m.text;
+      else if (m.t === 'a') renderAnswer(bubble('a'), m.data);
+      else bubble('a').textContent = m.text;
+    });
+  }
+  if (state.open) { panel.hidden = false; btn.setAttribute('aria-expanded', 'true'); if (narrow.matches) document.documentElement.classList.add('ask-open'); }
+  log.scrollTop = log.scrollHeight;
+  // Briefly highlight the section a chat link pointed to
+  try {
+    if (sessionStorage.getItem(KEY + '-jump') && location.hash) {
+      sessionStorage.removeItem(KEY + '-jump');
+      var t = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+      if (t) { t.classList.add('ask-target'); setTimeout(function () { t.classList.remove('ask-target'); }, 2600); }
+    }
+  } catch (x) { /* ignore */ }
 })();

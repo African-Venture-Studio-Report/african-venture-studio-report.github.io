@@ -455,3 +455,10 @@ figure.exhibit.bare{border:0;padding:0;margin:0}
   html.ask-open body{overflow:hidden}
 }
 @media print{.ask-btn,.ask-panel{display:none!important}}
+.ask-tools{display:flex;align-items:center;gap:4px}
+.ask-reset{font-family:Lato,sans-serif;font-weight:700;font-size:13px;color:var(--p);background:#fff;border:1px solid var(--lav2);border-radius:999px;padding:6px 12px;min-height:36px;cursor:pointer}
+.ask-reset:hover{background:var(--tint)}
+.ask-reset[hidden]{display:none}
+.ask-target{animation:askflash 2.6s ease-out}
+@keyframes askflash{0%,30%{background:#FBF1D6;box-shadow:0 0 0 8px #FBF1D6}100%{background:transparent;box-shadow:0 0 0 8px transparent}}
+@media (max-width:600px){.ask-reset{min-height:40px}}
