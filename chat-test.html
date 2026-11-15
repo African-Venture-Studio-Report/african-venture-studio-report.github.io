@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
+<title>Ask the report: test run</title>
+<style>body{font-family:Calibri,Carlito,system-ui,sans-serif;max-width:900px;margin:24px auto;padding:0 16px;color:#2B2235}h1{font-size:22px}button{font:inherit;font-weight:700;padding:10px 16px;background:#4C1D7D;color:#fff;border:0;border-radius:4px;cursor:pointer;margin-right:8px}
+.r{border-top:1px solid #E6DCF4;padding:10px 0}.q{font-weight:700}.a{margin:4px 0}.s{font-size:13px;color:#6E6180}.qt{font-size:13px;font-style:italic;border-left:3px solid #D9A227;padding-left:8px;margin:4px 0}#st{margin:12px 0;font-weight:700}</style></head>
+<body><h1>Ask the report: test run (36 questions)</h1>
+<p>Click Start. It takes about 2 minutes. When it finishes, click Copy results and paste them into the chat with Claude.</p>
+<button id="go">Start</button><button id="cp" disabled>Copy results</button><div id="st"></div><div id="out"></div>
+<script>
+var EP='https://avsr-chat.kathure16.workers.dev/';
+var Q=[["What is this report about?"],["What share of studio portfolio companies have a recorded external round?"],["How does that compare with Briter's benchmark?",1],
+["Do studio companies raise second rounds more often than other startups?"],["Does that hold without the largest portfolio?",1],["What is the second-round rate at studios with their own funds?"],
+["Who writes the first cheque for studio companies?"],["Which investors backed the most studio companies in a first round?"],["What share of named investor participations are African at Series C and later?"],
+["How many studios were verified, and how were they selected?"],["How many studios disclose their portfolios?"],["Which region has the highest funding rate?"],["And North Africa?",1],
+["Which sectors have the highest second-round rates?"],["What is dormancy and how common is it?"],["How much capital did studio companies raise, and at which stages?"],
+["Does the 72% seed to Series A benchmark hold in Africa?"],["Do studio companies exit more often than other startups?"],["What share of funded studio companies have a female chief executive?"],
+["What should DFIs and LPs do?"],["What should venture studio founders do?"],["What are the main limitations of the study?"],["What is the data cut-off date?"],
+["Where does the funding data come from?"],["Tell me about Pyramidia Ventures"],["How many portfolio companies does Delta40 have?"],["Which studios are headquartered in Nigeria?"],
+["What does the report say about Y Combinator?"],["Is Kepple Africa Ventures an active investor in studio companies?"],["Do studios with their own funds cause higher funding rates?"],
+["Is the follow-on advantage statistically significant?"],["What is the capital of France?"],["What is the best venture studio in Africa?"],["How much equity does Pyramidia take in its companies?"],
+["What will startup funding look like in 2027?"],["Should I invest in a venture studio?"]];
+var out=document.getElementById('out'),st=document.getElementById('st'),txt=[];
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
+document.getElementById('go').onclick=async function(){this.disabled=true;var hist=[];
+ for(var i=0;i<Q.length;i++){var q=Q[i][0],follow=Q[i][1];if(!follow)hist=[];st.textContent='Asking '+(i+1)+' of '+Q.length+'…';
+  var d;try{var r=await fetch(EP,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({question:q,history:hist.slice(-2)})});d=await r.json();}catch(e){d={error:String(e)}}
+  var div=document.createElement('div');div.className='r';var line=(i+1)+'. Q: '+q+(follow?' (follow-up)':'')+'\nA: '+(d.answer||d.error||'')+'\n';
+  div.innerHTML='';var a=document.createElement('div');a.className='q';a.textContent=(i+1)+'. '+q+(follow?' (follow-up)':'');div.appendChild(a);
+  var b=document.createElement('div');b.className='a';b.textContent=d.answer||('ERROR: '+(d.error||''));div.appendChild(b);
+  (d.sources||[]).forEach(function(s,k){var e=document.createElement('div');e.className='s';e.textContent='['+(k+1)+'] '+s.label;div.appendChild(e);line+='  ['+(k+1)+'] '+s.label+'\n';
+   if(s.quote){var qq=document.createElement('div');qq.className='qt';qq.textContent='“'+s.quote+'”';div.appendChild(qq);line+='      "'+s.quote+'"\n';}});
+  out.appendChild(div);txt.push(line);if(d.answer&&d.covered)hist.push({q:q,a:d.answer});await sleep(1200);}
+ st.textContent='Done. Click Copy results.';document.getElementById('cp').disabled=false;};
+document.getElementById('cp').onclick=function(){navigator.clipboard.writeText(txt.join('\n')).then(function(){st.textContent='Copied. Paste it into the chat with Claude.';});};
+</script></body></html>

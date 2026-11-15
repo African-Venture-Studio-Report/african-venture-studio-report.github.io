@@ -10,7 +10,9 @@
  *     "The report doesn't cover that."
  *  3. Every number in the AI's answer must appear in the passages it cites. If one does not,
  *     the answer is withheld and the reader is pointed to the relevant sections instead.
- *  4. Each answer lists the chapter or exhibit it came from, with links.
+ *  4. Each answer lists the chapter or exhibit it came from, with links and the exact supporting quote.
+ *  5. Follow-up questions can use the last two exchanges to understand what the reader means;
+ *     facts still come only from the report passages.
  */
 
 const SITE = 'https://african-venture-studio-report.github.io';
@@ -66,18 +68,44 @@ function search(q) {
   return { hits: scored.slice(0, TOP_K), top: scored.length ? scored[0].s : 0, qt };
 }
 
+const FOLLOW = /\b(it|its|that|this|they|them|those|these|there|their|why|how so|what about|and in|same|more on|explain)\b/i;
+function cleanHistory(h) {
+  if (!Array.isArray(h)) return [];
+  return h.slice(-2).map(x => ({ q: String((x && x.q) || '').slice(0, 400), a: String((x && x.a) || '').replace(/\[\d+\]/g, '').slice(0, 600) }))
+    .filter(x => x.q && x.a);
+}
+function splitUnits(text) {
+  if (text.includes(' || ')) return text.split(' || ').map(t => t.replace(/^.*Table rows: /, ''));
+  return text.split(/(?<=[.!?])\s+(?=[A-Z0-9\u201c"(])/);
+}
+function bestQuote(chunkText, answerText) {
+  const want = new Set(tokens(answerText)), nums = new Set(numbersIn(answerText));
+  let best = '', bestScore = -1;
+  for (const u of splitUnits(chunkText)) {
+    if (u.length < 25) continue;
+    const ut = tokens(u); let sc = 0;
+    for (const t of new Set(ut)) if (want.has(t)) sc += 1;
+    for (const n of numbersIn(u)) if (nums.has(n)) sc += 3;
+    if (sc > bestScore) { bestScore = sc; best = u; }
+  }
+  best = best.trim();
+  return best.length > 340 ? best.slice(0, 337).replace(/\s+\S*$/, '') + '\u2026' : best;
+}
+
 function numbersIn(text) {
   return (text.replace(/\[S\d+\]/g, '').match(/\d[\d,]*(?:\.\d+)?/g) || [])
     .map(x => x.replace(/,/g, '')).filter(x => x.length > 0);
 }
-function sourcesFor(ids) {
+function sourcesFor(ids, answerText) {
   const seen = new Set(), out = [];
   for (const i of ids) {
     const c = CHUNKS[i];
     const key = c.url;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ label: c.label, url: SITE + '/' + c.url });
+    const o = { label: c.label, url: SITE + '/' + c.url };
+    if (answerText) o.quote = bestQuote(c.text, answerText);
+    out.push(o);
   }
   return out;
 }
@@ -92,6 +120,8 @@ const SYSTEM = [
   '- Describe every figure with the label the passage gives it (for example a table column name such as "Portfolio companies"). Never relabel a figure as a score, rating, rank or anything the passage does not call it.',
   '- When naming a studio, investor or company, report only what the passages state about it, using their wording.',
   '- Do not speculate, recommend or give opinions beyond what the passages state.',
+  '- Earlier turns of the conversation only tell you what the reader is referring to. Every fact must still come from the source passages.',
+  '- Keep the qualifiers the passages use (for example "recorded", "association", "not statistically significant").',
   '- Answer in plain English, in at most 4 short sentences.'
 ].join('\n');
 
@@ -118,12 +148,15 @@ export default {
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, okOrigin);
     if (!okOrigin) return json({ error: 'Not allowed' }, 403, SITE);
 
-    let q = '';
-    try { q = String((await request.json()).question || '').trim(); } catch (e) { /* empty */ }
+    let q = '', history = [];
+    try { const body = await request.json(); q = String(body.question || '').trim(); history = cleanHistory(body.history); } catch (e) { /* empty */ }
     if (!q) return json({ error: 'Please type a question.' }, 400, okOrigin);
     if (q.length > MAX_QUESTION) return json({ error: 'Please keep questions under 400 characters.' }, 400, okOrigin);
 
-    const { hits, top } = search(q);
+    let query = q;
+    if (history.length && (tokens(q).length < 5 || FOLLOW.test(q))) query = history[history.length - 1].q + ' ' + q;
+    let { hits, top } = search(query);
+    if ((!hits.length || top < MIN_SCORE) && query !== q) ({ hits, top } = search(q));
     if (!hits.length || top < MIN_SCORE) {
       return json({ covered: false, answer: NOT_COVERED + ' ' + NOT_COVERED_HINT, sources: [] }, 200, okOrigin);
     }
@@ -132,7 +165,9 @@ export default {
     let raw = '';
     try {
       const out = await env.REPORT_AI.run(MODEL, {
-        messages: [ { role: 'system', content: SYSTEM }, { role: 'user', content: `Source passages:\n\n${passages}\n\nQuestion: ${q}` } ],
+        messages: [ { role: 'system', content: SYSTEM },
+          ...history.flatMap(h => [ { role: 'user', content: h.q }, { role: 'assistant', content: h.a } ]),
+          { role: 'user', content: `Source passages:\n\n${passages}\n\nQuestion: ${q}` } ],
         max_tokens: 400, temperature: 0.1
       });
       raw = String(out && (out.response ?? (out.result && out.result.response) ?? (out.choices && out.choices[0] && out.choices[0].message && out.choices[0].message.content)) || '').trim();
@@ -164,6 +199,6 @@ export default {
     }
     const answer = raw.replace(/\[S(\d+)\]/g, (m, d) => { const k = +d - 1; if (k < 0 || k >= hits.length) return ''; return '[' + map.get(CHUNKS[hits[k].i].url) + ']'; })
       .replace(/(\[\d+\])(\1)+/g, '$1').replace(/\s+([.,;])/g, '$1').trim();
-    return json({ covered: true, verified: true, answer, sources: sourcesFor(order) }, 200, okOrigin);
+    return json({ covered: true, verified: true, answer, sources: sourcesFor(order, raw.replace(/\[S\d+\]/g, '')) }, 200, okOrigin);
   }
 };

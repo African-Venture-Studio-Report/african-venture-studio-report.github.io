@@ -107,7 +107,11 @@
     if (data.sources && data.sources.length) {
       var h = el('p', 'ask-src-h', 'From the report:'); box.appendChild(h);
       var ol = el('ol', 'ask-src');
-      data.sources.forEach(function (s) { var li = el('li'); var href = localUrl(s.url); var a = el('a', null, s.label); if (href) a.href = href; li.appendChild(a); ol.appendChild(li); });
+      data.sources.forEach(function (s) {
+        var li = el('li'); var href = localUrl(s.url); var a = el('a', null, s.label); if (href) a.href = href; li.appendChild(a);
+        if (s.quote) { var bq = el('blockquote', 'ask-quote', '\u201c' + s.quote + '\u201d'); li.appendChild(bq); }
+        ol.appendChild(li);
+      });
       box.appendChild(ol);
     }
   }
@@ -119,7 +123,13 @@
     bubble('q').textContent = q;
     state.msgs.push({ t: 'q', text: q }); reset.hidden = false; save();
     var wait = bubble('a pending'); wait.textContent = 'Searching the report…';
-    fetch(ENDPOINT, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: q }) })
+    var history = [];
+    for (var i = 0; i < state.msgs.length - 2; i++) {
+      var m1 = state.msgs[i], m2 = state.msgs[i + 1];
+      if (m1.t === 'q' && m2 && m2.t === 'a' && m2.data && m2.data.answer) history.push({ q: m1.text, a: m2.data.answer });
+    }
+    history = history.slice(-2);
+    fetch(ENDPOINT, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: q, history: history }) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
         wait.className = 'ask-msg a'; wait.textContent = '';

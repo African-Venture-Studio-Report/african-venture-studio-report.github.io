@@ -487,3 +487,4 @@ figure.exhibit.bare{border:0;padding:0;margin:0}
 .htrack{min-width:0}
 article.report a,.notes a,.ex-notes a{overflow-wrap:anywhere;word-break:break-word}
 article.report,.notes{overflow-wrap:break-word}
+.ask-quote{margin:6px 0 4px;padding:8px 10px;border-left:3px solid var(--gold);background:#fff;font-size:13px;line-height:1.45;color:var(--text2);font-style:italic;overflow-wrap:anywhere}
