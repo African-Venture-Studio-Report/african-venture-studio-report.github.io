@@ -78,6 +78,13 @@ function buildIndex() {
 }
 const OVERVIEW = /\b(what('?s| is) (this|the) (report|study|research)( all)? about|summar|overview|key (finding|takeaway|message)|main (finding|point|takeaway)|tl;?dr|in (brief|short)|what did (you|they|the authors) find)/i;
 const EXPAND = [
+  [/how (?:was |were |is )?(?:the |this )?(?:study|research|report|analysis)(?: was| is)? (?:done|conducted|carried out|built|made|designed)|method(?:ology|s)?\b|how did (?:you|they|the authors)|research design|how (?:were|was) (?:the )?(?:studios|sample|data) (?:selected|chosen|found|collected|identified|verified)/i,
+   ' Technical annex Data Africa: The Big Deal portfolio entries were built counting rules statistical methods verified studios assessed 89 organisations'],
+  [/\bwho invests\b|\binvestors?\s*\??\s*$/i, ' investors first external cheque named investor participations'],
+  [/studio structures?|\bstructures?\s*\??\s*$/i, ' studios with their own funds single entity studios dual entity structure funding rate'],
+  [/^\s*regions?\s*\??\s*$|by region/i, ' region funding rate West Africa East Africa Southern Africa North Africa'],
+  [/follow-?on/i, ' second round within 24 months follow-on funding rates'],
+  [/^\s*funding rates?\s*\??\s*$/i, ' funding rate external round 124 of the 456 companies'],
   [/cut[\s-]?off|how (recent|current|up to date)|date range|time ?frame|period covered|latest data|data (end|run)/i, ' Round and investor data come from Africa: The Big Deal covering 1 January 2019 to 30 September 2026'],
 ];
 // Definition questions: "what is a Series A", "what does dormancy mean", "define pre-seed"
@@ -99,6 +106,19 @@ function mentions(term) {
   const top = all.slice().sort((a, b) => b.n - a.n || a.i - b.i).slice(0, 6).sort((a, b) => a.i - b.i);
   return { total: all.length, ids: top.map(x => x.i) };
 }
+function glossary(term) {
+  const want = term.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/s$/, '');
+  for (let i = 0; i < CHUNKS.length; i++) {
+    const c = CHUNKS[i]; if (!/E\.[12] (Terms|Abbreviations)/.test(c.label)) continue;
+    for (const row of c.text.replace(/^.*?Table rows: /, '').split(' || ')) {
+      const m = row.match(/^(?:Term|Abbreviation): ([^;]+); (?:Meaning in this report|In full): (.+)$/);
+      if (!m) continue;
+      const t = m[1].toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/s$/, '');
+      if (t === want) return { i, term: m[1], meaning: m[2].trim(), row };
+    }
+  }
+  return null;
+}
 function termQuote(text, term) {
   const re = new RegExp('\\b' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '[\\s-]+'), 'i');
   const units = splitUnits(text).map(u => u.replace(/^.*?(Data|Table) rows: /, '')).filter(u => re.test(u) && u.length >= 20);
@@ -106,9 +126,28 @@ function termQuote(text, term) {
   const u = units.sort((a, b) => a.length - b.length).find(x => x.length >= 40) || units[0];
   return u.length > 340 ? u.slice(0, 337).replace(/\s+\S*$/, '') + '\u2026' : u;
 }
+// Broad topic questions go to the sections written for them
+const INTENTS = [
+  { re: /how (?:was |were |is )?(?:the |this )?(?:study|research|report|analysis)(?: was| is)? (?:done|conducted|carried out|built|made|designed)|method(?:ology|s)?\b|how did (?:you|they|the authors) (?:do|conduct|build|collect|gather|find)|research design|how (?:were|was) (?:the )?(?:studios|sample|data) (?:selected|chosen|found|collected|identified|verified)/i,
+    labels: ['A.1 Data', 'A.2 How the 464', 'Exhibit 5 (', 'Portfolio disclosure determines', 'A.3 Counting rules', 'A.4 Statistical methods'],
+    hint: 'The question asks how the study was done. Summarise the data, how studios were selected and verified, and how portfolios were matched to the deal record, as the passages state.' },
+  { re: /studio structures?|^\s*structures?\s*\??\s*$|by structure/i,
+    labels: ['B.3 Studios and funding rates by structure', 'Studios with their own funds are associated', 'Exhibit 29 (', 'Exhibit 15 (', 'Dual entity studio', 'Single entity studio'],
+    hint: '' },
+  { re: /^\s*regions?\s*\??\s*$|by region|regional/i,
+    labels: ['B.2 Studios and funding rates by region', 'Exhibit 21 (', 'Funding rates are highest at West African', 'In North Africa, the constraint'],
+    hint: '' },
+];
+function intentOf(q) { return INTENTS.find(x => x.re.test(q)) || null; }
 function search(q) {
+  const intent = intentOf(q);
   for (const [re, extra] of EXPAND) if (re.test(q)) q += extra;
   if (!INDEX) buildIndex();
+  if (intent) {
+    const ids = [];
+    for (const l of intent.labels) { const i = CHUNKS.findIndex((c, k) => (c.label.includes(l) || c.text.startsWith('Table rows: Term: ' + l) || c.text.includes('Term: ' + l + ';')) && !ids.includes(k)); if (i >= 0) ids.push(i); }
+    if (ids.length) return { hits: ids.slice(0, TOP_K).map(i => ({ i, s: 50 })), top: 50, qt: [] };
+  }
   if (OVERVIEW.test(q)) {
     const ids = CHUNKS.map((c, i) => [c, i]).filter(([c]) => c.url.startsWith('executive-summary') || c.label.includes('Foreword from the authors')).slice(0, TOP_K).map(([, i]) => i);
     return { hits: ids.map(i => ({ i, s: 99 })), top: 99, qt: [] };
@@ -273,6 +312,14 @@ export default {
       return json({ covered: false, answer: NOT_COVERED + ' ' + NOT_COVERED_HINT, sources: [] }, 200, okOrigin);
     }
 
+    // Terms the report defines in its glossary (Annex E) are answered word for word from it
+    const dterm = definitionTerm(q);
+    if (dterm) {
+      const g = glossary(dterm);
+      if (g) return json({ covered: true, verified: true,
+        answer: `In this report, \u201c${g.term}\u201d means: ${g.meaning} [1]`,
+        sources: [{ label: CHUNKS[g.i].label, url: SITE + CHUNKS[g.i].url, quote: g.row }] }, 200, okOrigin);
+    }
     const isOverview = OVERVIEW.test(query) || OVERVIEW.test(q);
     const passages = hits.map((h, k) => `[S${k + 1}] (${CHUNKS[h.i].label})\n${CHUNKS[h.i].text}`).join('\n\n');
     let raw = '';
@@ -280,7 +327,7 @@ export default {
       const out = await env.REPORT_AI.run(MODEL, {
         messages: [ { role: 'system', content: SYSTEM },
           ...history.flatMap(h => [ { role: 'user', content: h.q }, { role: 'assistant', content: h.a } ]),
-          { role: 'user', content: `Source passages:\n\n${passages}\n\n` + (isOverview ? 'These passages are the report\'s executive summary. The question asks for an overview: summarise the main findings they state, in at most 4 sentences, with citations.\n\n' : '') + `Question: ${q}` } ],
+          { role: 'user', content: `Source passages:\n\n${passages}\n\n` + (intentOf(query) && intentOf(query).hint ? intentOf(query).hint + '\n\n' : '') + (isOverview ? 'These passages are the report\'s executive summary. The question asks for an overview: summarise the main findings they state, in at most 4 sentences, with citations.\n\n' : '') + `Question: ${q}` } ],
         max_tokens: 400, temperature: 0.1
       });
       raw = String(out && (out.response ?? (out.result && out.result.response) ?? (out.choices && out.choices[0] && out.choices[0].message && out.choices[0].message.content)) || '').trim();
@@ -289,7 +336,7 @@ export default {
     }
 
     if (!raw || /NOT_COVERED/.test(raw)) {
-      if (isOverview) {
+      if (isOverview || intentOf(query) || intentOf(q)) {
         return json({ covered: true, verified: false,
           answer: 'The report does not answer that in a single passage. These sections are the closest match:',
           sources: sourcesFor(hits.slice(0, 3).map(h => h.i)) }, 200, okOrigin);
