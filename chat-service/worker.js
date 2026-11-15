@@ -115,7 +115,7 @@ function splitUnits(text) {
 function bestQuote(chunkText, answerText) {
   const want = new Set(tokens(answerText)), nums = new Set(numbersIn(answerText));
   let best = '', bestScore = -1;
-  for (const u of splitUnits(chunkText)) {
+  for (const u0 of splitUnits(chunkText)) { const u = u0.replace(/^.*?(Data|Table) rows: /, '');
     if (u.length < 25) continue;
     const ut = tokens(u); let sc = 0;
     for (const t of new Set(ut)) if (want.has(t)) sc += 1;
