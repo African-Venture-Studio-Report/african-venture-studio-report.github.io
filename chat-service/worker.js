@@ -234,13 +234,14 @@ export default {
       return json({ covered: false, answer: NOT_COVERED + ' ' + NOT_COVERED_HINT, sources: [] }, 200, okOrigin);
     }
 
+    const isOverview = OVERVIEW.test(query) || OVERVIEW.test(q);
     const passages = hits.map((h, k) => `[S${k + 1}] (${CHUNKS[h.i].label})\n${CHUNKS[h.i].text}`).join('\n\n');
     let raw = '';
     try {
       const out = await env.REPORT_AI.run(MODEL, {
         messages: [ { role: 'system', content: SYSTEM },
           ...history.flatMap(h => [ { role: 'user', content: h.q }, { role: 'assistant', content: h.a } ]),
-          { role: 'user', content: `Source passages:\n\n${passages}\n\nQuestion: ${q}` } ],
+          { role: 'user', content: `Source passages:\n\n${passages}\n\n` + (isOverview ? 'These passages are the report\'s executive summary. The question asks for an overview: summarise the main findings they state, in at most 4 sentences, with citations.\n\n' : '') + `Question: ${q}` } ],
         max_tokens: 400, temperature: 0.1
       });
       raw = String(out && (out.response ?? (out.result && out.result.response) ?? (out.choices && out.choices[0] && out.choices[0].message && out.choices[0].message.content)) || '').trim();
@@ -249,6 +250,11 @@ export default {
     }
 
     if (!raw || /NOT_COVERED/.test(raw)) {
+      if (isOverview) {
+        return json({ covered: true, verified: false,
+          answer: 'The report does not answer that in a single passage. These sections are the closest match:',
+          sources: sourcesFor(hits.slice(0, 3).map(h => h.i)) }, 200, okOrigin);
+      }
       return json({ covered: false, answer: NOT_COVERED + ' ' + NOT_COVERED_HINT, sources: [] }, 200, okOrigin);
     }
     const cited = [...new Set([...raw.matchAll(/\[S(\d+)\]/g)].map(m => +m[1] - 1).filter(k => k >= 0 && k < hits.length))];
