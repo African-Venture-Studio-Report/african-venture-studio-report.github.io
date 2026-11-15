@@ -462,3 +462,23 @@ figure.exhibit.bare{border:0;padding:0;margin:0}
 .ask-target{animation:askflash 2.6s ease-out}
 @keyframes askflash{0%,30%{background:#FBF1D6;box-shadow:0 0 0 8px #FBF1D6}100%{background:transparent;box-shadow:0 0 0 8px transparent}}
 @media (max-width:600px){.ask-reset{min-height:40px}}
+/* Chat: minimise and expand */
+.ask-titlebtn{display:flex;align-items:baseline;gap:10px;background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;text-align:left;cursor:default;min-height:44px;align-items:center}
+.ask-titlebtn:disabled{opacity:1}
+.ask-count{font-family:Lato,sans-serif;font-size:13px;font-weight:700;color:var(--muted)}
+.ask-min{background:none;border:0;color:var(--text2);min-width:44px;min-height:44px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;border-radius:6px}
+.ask-min:hover,.ask-close:hover{background:var(--tint)}
+.ask-min:focus-visible,.ask-titlebtn:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.ask-panel.is-min{height:auto;bottom:20px;width:min(340px,calc(100vw - 40px))}
+.ask-panel.is-min .ask-log,.ask-panel.is-min .ask-form,.ask-panel.is-min .ask-note,.ask-panel.is-min .ask-reset{display:none}
+.ask-panel.is-min .ask-head{border-bottom:0;padding:6px 8px 6px 16px}
+.ask-panel.is-min .ask-titlebtn{cursor:pointer}
+.ask-panel.is-min .ask-head h2{font-size:16px}
+.ask-btn[hidden]{display:none!important}
+@media (max-width:600px){
+  .ask-panel.is-min{top:auto;left:0;right:0;bottom:0;width:100%;height:auto;border-radius:12px 12px 0 0;border-left:0;border-right:0;box-shadow:0 -6px 20px rgba(27,13,43,.18)}
+  .ask-panel.is-min .ask-head{padding:4px 6px 4px 16px}
+  .ask-panel:not(.is-min) .ask-head{padding-top:10px}
+  body{padding-bottom:0}
+}
+@media (max-width:600px){html.ask-min body{padding-bottom:64px}}

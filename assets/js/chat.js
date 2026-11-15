@@ -30,8 +30,13 @@
   var title = el('h2', null, 'Ask the report'); title.id = 'ask-title';
   var close = el('button', 'ask-close'); close.type = 'button'; close.setAttribute('aria-label', 'Close'); close.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
   var reset = el('button', 'ask-reset', 'New chat'); reset.type = 'button';
-  var tools = el('div', 'ask-tools'); tools.appendChild(reset); tools.appendChild(close);
-  head.appendChild(title); head.appendChild(tools);
+  var minBtn = el('button', 'ask-min'); minBtn.type = 'button';
+  var ICON_MIN = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
+  var ICON_MAX = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var count = el('span', 'ask-count');
+  var titleWrap = el('button', 'ask-titlebtn'); titleWrap.type = 'button'; titleWrap.appendChild(title); titleWrap.appendChild(count);
+  var tools = el('div', 'ask-tools'); tools.appendChild(reset); tools.appendChild(minBtn); tools.appendChild(close);
+  head.appendChild(titleWrap); head.appendChild(tools);
   var log = el('div', 'ask-log'); log.setAttribute('aria-live', 'polite');
   var intro = el('div', 'ask-intro');
   intro.appendChild(el('p', null, 'Ask about the findings. Every answer is drawn from the report and linked to its source chapter or exhibit.'));
@@ -48,16 +53,36 @@
   panel.appendChild(head); panel.appendChild(log); panel.appendChild(form); panel.appendChild(note);
   document.body.appendChild(btn); document.body.appendChild(panel);
 
-  function open() { state.open = true; save(); panel.hidden = false; btn.setAttribute('aria-expanded', 'true'); document.documentElement.classList.add('ask-open'); setTimeout(function () { input.focus(); }, 30); }
-  function shut() { state.open = false; save(); panel.hidden = true; btn.setAttribute('aria-expanded', 'false'); document.documentElement.classList.remove('ask-open'); btn.focus(); }
-  btn.addEventListener('click', function () { panel.hidden ? open() : shut(); });
+  function setView(v, focus) {
+    state.open = v === 'open' ? true : (v === 'min' ? 'min' : false); save();
+    panel.hidden = v === 'closed';
+    panel.classList.toggle('is-min', v === 'min');
+    btn.hidden = v !== 'closed';
+    btn.setAttribute('aria-expanded', v === 'closed' ? 'false' : 'true');
+    document.documentElement.classList.toggle('ask-open', v === 'open' && narrow.matches);
+    document.documentElement.classList.toggle('ask-min', v === 'min');
+    minBtn.innerHTML = v === 'min' ? ICON_MAX : ICON_MIN;
+    minBtn.setAttribute('aria-label', v === 'min' ? 'Expand chat' : 'Minimise chat');
+    titleWrap.setAttribute('aria-label', v === 'min' ? 'Expand chat' : 'Ask the report');
+    titleWrap.disabled = v !== 'min';
+    var qn = state.msgs.filter(function (m) { return m.t === 'q'; }).length;
+    count.textContent = (v === 'min' && qn) ? qn + (qn === 1 ? ' question' : ' questions') : '';
+    if (v === 'open') { log.scrollTop = log.scrollHeight; if (focus !== false) setTimeout(function () { input.focus(); }, 30); }
+    if (v === 'min' && focus !== false) minBtn.focus();
+    if (v === 'closed' && focus !== false) btn.focus();
+  }
+  function open() { setView('open'); }
+  function shut() { setView('closed'); }
+  btn.addEventListener('click', open);
+  minBtn.addEventListener('click', function () { setView(panel.classList.contains('is-min') ? 'open' : 'min'); });
+  titleWrap.addEventListener('click', function () { if (panel.classList.contains('is-min')) open(); });
   close.addEventListener('click', shut);
   reset.addEventListener('click', function () {
     state.msgs = []; save();
     while (log.firstChild) log.removeChild(log.firstChild);
     log.appendChild(intro); reset.hidden = true; input.focus();
   });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden) shut(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden && !panel.classList.contains('is-min')) setView('min'); });
   input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit ? form.requestSubmit() : send(input.value); } });
   form.addEventListener('submit', function (e) { e.preventDefault(); send(input.value); });
 
@@ -65,7 +90,7 @@
     var a = e.target.closest && e.target.closest('a[href]');
     if (!a) return;
     try { sessionStorage.setItem(KEY + '-jump', '1'); } catch (x) { /* ignore */ }
-    if (narrow.matches) { state.open = false; save(); panel.hidden = true; btn.setAttribute('aria-expanded', 'false'); document.documentElement.classList.remove('ask-open'); }
+    setView('min', false);
   });
   function bubble(cls) { var b = el('div', 'ask-msg ' + cls); log.appendChild(b); log.scrollTop = log.scrollHeight; return b; }
   function renderAnswer(box, data) {
@@ -117,7 +142,7 @@
       else bubble('a').textContent = m.text;
     });
   }
-  if (state.open) { panel.hidden = false; btn.setAttribute('aria-expanded', 'true'); if (narrow.matches) document.documentElement.classList.add('ask-open'); }
+  setView(state.open === true ? 'open' : (state.open === 'min' ? 'min' : 'closed'), false);
   log.scrollTop = log.scrollHeight;
   // Briefly highlight the section a chat link pointed to
   try {
