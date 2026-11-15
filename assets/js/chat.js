@@ -36,7 +36,7 @@
   var input = el('textarea'); input.id = 'ask-input'; input.rows = 1; input.maxLength = 400; input.placeholder = 'Ask about the findings…';
   var go = el('button', 'ask-send', 'Ask'); go.type = 'submit';
   form.appendChild(label); form.appendChild(input); form.appendChild(go);
-  var note = el('p', 'ask-note', 'AI-generated from the report. The full report is the authoritative source.');
+  var note = el('p', 'ask-note', 'AI-assisted responses, drawn strictly from the report. The full report is the authoritative source.');
   panel.appendChild(head); panel.appendChild(log); panel.appendChild(form); panel.appendChild(note);
   document.body.appendChild(btn); document.body.appendChild(panel);
 
