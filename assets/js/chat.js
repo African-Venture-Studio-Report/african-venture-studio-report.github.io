@@ -137,8 +137,28 @@
     units.forEach(function (u) { if (u.length < 40) return; var ut = toks(u), sc = 0; qt.forEach(function (t) { if (ut.indexOf(t) >= 0) sc += Math.log(1 + DOCS.length / (DF[t] || 1)); }); if (sc > bs + 1e-9 || (Math.abs(sc - bs) < 1e-9 && u.length < best.length)) { bs = sc; best = u; } });
     best = best.trim(); return best.length > 300 ? best.slice(0, 297).replace(/\s+\S*$/, '') + '…' : best;
   }
+  var OVERVIEW_Q = /\b(key|main|headline|top|major|core)\s+(finding|takeaway|point|message|result)s?\b|\bwhat (are|were) the (findings|results)\b|^\s*(the )?findings?\s*\??\s*$|\bsumm?ar(y|ise|ize)\b|\boverview\b|\bwhat(\s+is|'s)\s+(this|the)\s+(report|study)\s+about\b|\bwhat did (you|they|the authors) find\b|\btl;?dr\b/i;
+  var CHAP_Q = /\b(?:ch\.?|c[a-z]*h[a-z]*p[a-z]*)\s*(\d)\b/i;
+  function firstSentence(t) { var m = String(t).match(/^.*?[.!?](?=\s|$)/); var x = (m ? m[0] : String(t)).trim(); return x.length > 300 ? x.slice(0, 297).replace(/\s+\S*$/, '') + '\u2026' : x; }
+  function headlineFindings(docs) {
+    var t = docs.filter(function (d) { return /^executive-summary/.test(d.url); }).map(function (d) { return d.text; }).join(' ');
+    var re = /Finding (\d\d): (.+?)\. (.+?) \(Covered in ([^)]*?)\.\)/g, m, out = [];
+    while ((m = re.exec(t)) && out.length < 6) {
+      var ch = (m[4].match(/Chapter (\d)/) || [])[1], ex = (m[4].match(/Exhibits? (\d+)/) || [])[1];
+      out.push({ label: 'Finding ' + m[1] + ': ' + m[2] + ' (' + m[4] + ')', url: ch ? 'chapter-' + ch + '.html' + (ex ? '#exhibit-' + ex : '') : 'executive-summary.html', quote: firstSentence(m[3]) });
+    }
+    return out;
+  }
+  function chapterSections(docs, n) {
+    var seen = {}, out = [];
+    docs.forEach(function (d) { if (d.url.indexOf('chapter-' + n + '.html') === 0 && !/^Exhibit /.test(d.label) && !seen[d.label] && out.length < 6) { seen[d.label] = 1; out.push({ label: d.label, url: d.url, quote: firstSentence(d.text) }); } });
+    return out;
+  }
   function localSearch(q) {
     return loadDocs().then(function (docs) {
+      var cm = q.match(CHAP_Q);
+      if (cm && +cm[1] >= 1 && +cm[1] <= 9 && !/exhibit/i.test(q)) { var cs = chapterSections(docs, +cm[1]); if (cs.length) return cs; }
+      if (!cm && OVERVIEW_Q.test(q)) { var hf = headlineFindings(docs); if (hf.length) return hf; }
       var qt = toks(q).filter(function (t, i, a) { return a.indexOf(t) === i; }), n = docs.length;
       var scored = docs.map(function (d, i) { var s = 0; qt.forEach(function (t) { var f = d.tf[t]; if (!f) return; var idf = Math.log(1 + (n - DF[t] + 0.5) / (DF[t] + 0.5)); s += idf * (f * 2.4) / (f + 1.4 * (0.25 + 0.75 * d.len / AVG)); }); return { d: d, s: s }; })
         .filter(function (x) { return x.s > 0; }).sort(function (a, b) { return b.s - a.s; });
@@ -147,10 +167,14 @@
       return out;
     });
   }
+  function resumeTime() {
+    var d = new Date(); d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1));
+    try { return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (e) { return 'midnight UTC'; }
+  }
   function fallback(wait, q, why) {
     var lead = why === 'hour' ? 'You have reached the hourly limit for AI answers, so here are the passages from the report that best match your question:'
       : (state.fellBack ? 'AI answers are still paused. These passages from the report best match your question:'
-      : 'AI answers are paused for now, usually because today’s free allowance has been used. They resume after midnight UTC (03:00 in Nairobi). Meanwhile, these passages from the report best match your question:');
+      : 'AI answers are paused because today\u2019s free allowance has been used. They resume at ' + resumeTime() + ' your time. Meanwhile, these passages from the report best match your question:');
     return localSearch(q).then(function (src) {
       var data = src.length ? { answer: lead, sources: src, mode: 'search' } : { answer: (why === 'hour' ? 'You have reached the hourly limit for AI answers. ' : 'AI answers are paused for now. ') + 'No passage in the report closely matches that question. Try other words, or browse the chapters from the menu.', sources: [], mode: 'search' };
       state.fellBack = true; wait.className = 'ask-msg a'; wait.textContent = ''; renderAnswer(wait, data);
