@@ -310,7 +310,7 @@ function json(body, status, origin) {
 }
 
 export default {
-  async fetch(request, env) {
+  async handle(request, env) {
     const origin = request.headers.get('origin') || '';
     const okOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : null;
     if (request.method === 'OPTIONS') {
@@ -394,7 +394,10 @@ export default {
       });
       raw = String(out && (out.response ?? (out.result && out.result.response) ?? (out.choices && out.choices[0] && out.choices[0].message && out.choices[0].message.content)) || '').trim();
     } catch (e) {
-      return json({ error: 'The assistant is busy right now. Please try again later.' }, 503, okOrigin);
+      const msg = String((e && e.message) || e);
+      const quota = /4006|neuron|allocation|quota|daily|exceeded|limit/i.test(msg);
+      console.error('AI request failed: ' + msg.slice(0, 300));
+      return json({ error: 'The assistant is busy right now. Please try again later.', reason: quota ? 'quota' : 'error' }, 503, okOrigin);
     }
 
     if (!raw || /NOT_COVERED/.test(raw)) {
@@ -458,5 +461,15 @@ export default {
     const answer = raw.replace(/\[S(\d+)\]/g, (m, d) => { const k = +d - 1; if (k < 0 || k >= hits.length) return ''; return '[' + map.get(CHUNKS[hits[k].i].url) + ']'; })
       .replace(/(\[\d+\])(\1)+/g, '$1').replace(/\s+([.,;])/g, '$1').trim();
     return json({ covered: true, verified: true, answer, sources: sourcesFor(order, raw.replace(/\[S\d+\]/g, '')) }, 200, okOrigin);
+  },
+  async fetch(request, env, ctx) {
+    try { return await this.handle(request, env, ctx); }
+    catch (e) {
+      console.error('Unexpected error: ' + String((e && e.message) || e).slice(0, 300));
+      const origin = request.headers.get('origin') || '';
+      return json({ error: 'The assistant is unavailable right now. Please try again later.', reason: 'error' }, 500, ALLOWED_ORIGINS.includes(origin) ? origin : null);
+    }
   }
 };
+// Build the search index when the service starts, so no single question pays for it
+buildIndex();

@@ -173,10 +173,11 @@
   }
   function fallback(wait, q, why) {
     var lead = why === 'hour' ? 'You have reached the hourly limit for AI answers, so here are the passages from the report that best match your question:'
+      : why === 'down' ? 'AI answers are unavailable right now. These passages from the report best match your question:'
       : (state.fellBack ? 'AI answers are still paused. These passages from the report best match your question:'
       : 'AI answers are paused because today\u2019s free allowance has been used. They resume at ' + resumeTime() + ' your time. Meanwhile, these passages from the report best match your question:');
     return localSearch(q).then(function (src) {
-      var data = src.length ? { answer: lead, sources: src, mode: 'search' } : { answer: (why === 'hour' ? 'You have reached the hourly limit for AI answers. ' : 'AI answers are paused for now. ') + 'No passage in the report closely matches that question. Try other words, or browse the chapters from the menu.', sources: [], mode: 'search' };
+      var data = src.length ? { answer: lead, sources: src, mode: 'search' } : { answer: (why === 'hour' ? 'You have reached the hourly limit for AI answers. ' : why === 'down' ? 'AI answers are unavailable right now. ' : 'AI answers are paused for now. ') + 'No passage in the report closely matches that question. Try other words, or browse the chapters from the menu.', sources: [], mode: 'search' };
       state.fellBack = true; wait.className = 'ask-msg a'; wait.textContent = ''; renderAnswer(wait, data);
       state.msgs.push({ t: 'a', data: data }); save();
     }).catch(function () { wait.className = 'ask-msg a'; wait.textContent = 'The assistant is unavailable right now. Please try again later.'; state.msgs.push({ t: 'e', text: wait.textContent }); save(); });
@@ -198,7 +199,7 @@
     fetch(ENDPOINT, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: q, history: history }) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
       .then(function (res) {
-        if (res.status === 503 || res.status >= 500 || res.status === 429 || (!res.ok && !res.j.error)) return fallback(wait, q, res.status === 429 ? 'hour' : 'day');
+        if (res.status === 503 || res.status >= 500 || res.status === 429 || (!res.ok && !res.j.error)) return fallback(wait, q, res.status === 429 ? 'hour' : (res.j.reason === 'quota' ? 'day' : 'down'));
         wait.className = 'ask-msg a'; wait.textContent = '';
         if (!res.ok || res.j.error) { wait.textContent = res.j.error || 'Something went wrong. Please try again.'; state.msgs.push({ t: 'e', text: wait.textContent }); save(); return; }
         renderAnswer(wait, res.j);
@@ -206,7 +207,7 @@
         if (state.msgs.length > 40) state.msgs = state.msgs.slice(-40);
         save();
       })
-      .catch(function () { return fallback(wait, q, 'day'); })
+      .catch(function () { return fallback(wait, q, 'down'); })
       .then(function () { busy = false; go.disabled = false; log.scrollTop = log.scrollHeight; input.focus(); });
   }
   // Restore this session's conversation after a page change or reload
