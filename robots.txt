@@ -1,6 +1,5 @@
 User-agent: *
 Allow: /
 Disallow: /chat-service/
-Disallow: /chat-test.html
 
 Sitemap: https://african-venture-studio-report.github.io/sitemap.xml
